@@ -30,6 +30,10 @@ export function listEntries(key: string, filters: Record<string, string> = {}): 
 
 export function runAction(key: string, id: number, action: string): ActionResult {
   const meta = moduleMeta(key)
+  // 地面电源有独立领域规则（职责归属、状态机、排队、缺口），通用入口不得旁路。
+  if (key === 'gpu') {
+    return { ok: false, message: '地面电源动作必须经电源页面的职责校验发起，通用入口已停用' }
+  }
   const target = meta.actionTargets[action]
   if (!target) {
     return { ok: false, message: `${meta.entity}没有登记「${action}」这个动作` }

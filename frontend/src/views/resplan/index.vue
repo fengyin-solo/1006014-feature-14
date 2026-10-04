@@ -18,6 +18,42 @@
       </article>
     </div>
 
+    <!-- 电源车可用台数：与地面电源页同读领域服务 getAvailability，两侧数字同源 -->
+    <section class="gpu-source">
+      <h3>地面电源可用资源（同源口径）</h3>
+      <p class="gpu-source-desc">数据直接取自地面电源领域：调度可用＝待命且电缆检查通过；结束供电产生的缺口实时同步在此。</p>
+      <div class="stat-row">
+        <article v-for="item in gpuCards" :key="item.label" class="stat-card" :class="{ highlight: item.highlight }">
+          <span class="stat-label">{{ item.label }}</span>
+          <strong class="stat-value">{{ item.value }}</strong>
+        </article>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>产生时刻</th><th>缺口原因</th><th>设备</th><th>航班/机型</th>
+            <th>需求</th><th>当时可提供</th><th>差值</th><th>状态</th><th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="gap in openGaps" :key="gap.id">
+            <td>{{ formatTime(gap.createdAt) }}</td>
+            <td>{{ gap.reason }}</td>
+            <td>{{ gap.deviceCode }}</td>
+            <td>{{ gap.flightNo }} / {{ gap.aircraft }}</td>
+            <td>{{ gap.demandKva }}kVA</td>
+            <td>{{ gap.availableKva }}kVA</td>
+            <td class="shortfall">{{ gap.shortfallKva }}kVA</td>
+            <td>{{ gap.status }}</td>
+            <td>{{ gap.detail }}</td>
+          </tr>
+          <tr v-if="!openGaps.length">
+            <td colspan="9" class="empty-state">当前无开放缺口：每一次结束供电都会在这里留痕，关闭后自动归档</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
@@ -79,6 +115,12 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import {
+  formatTime,
+  getAvailability,
+  getGaps,
+  gpuStateVersion,
+} from '@/domain/gpu/service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('resplan')
@@ -86,6 +128,24 @@ const columns = ["计划编号", "保障时段", "机位需求", "车辆需求",
 const actions = ["提交审核", "下发计划", "作废计划"]
 const statuses = ["待编制", "待审核", "已下发", "已作废"]
 const stats = [{"label": "待编制计划", "value": 0}, {"label": "已下发计划", "value": 0}, {"label": "存在缺口的计划", "value": 0}]
+
+// 与地面电源页同源：不自己数设备，只认领域服务的口径。
+const gpuAvailability = computed(() => {
+  void gpuStateVersion.value
+  return getAvailability()
+})
+const openGaps = computed(() => {
+  void gpuStateVersion.value
+  return getGaps().filter((gap) => gap.status === '开放')
+})
+const gpuCards = computed(() => [
+  { label: '在册电源车', value: gpuAvailability.value.total, highlight: false },
+  { label: '供电中', value: gpuAvailability.value.supplying, highlight: false },
+  { label: '调度可用台数', value: gpuAvailability.value.available, highlight: true },
+  { label: '待检修', value: gpuAvailability.value.maintenance, highlight: false },
+  { label: '排队待供', value: gpuAvailability.value.queueLength, highlight: false },
+  { label: '开放缺口', value: gpuAvailability.value.openGaps, highlight: gpuAvailability.value.openGaps > 0 },
+])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -135,3 +195,17 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.gpu-source {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.gpu-source h3 { margin: 0 0 4px; font-size: 14px; }
+.gpu-source-desc { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.gpu-source .stat-card.highlight { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset; }
+.shortfall { color: #b42318; font-weight: 600; }
+</style>
