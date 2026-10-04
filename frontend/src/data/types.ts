@@ -32,6 +32,14 @@ export type ActionResult = {
   message: string
 }
 
+/** 操作人身份：由会话 store 组装，页面只负责传递，权限判断都在服务层。 */
+export type ActionContext = {
+  operator: string
+  role: string
+  team: string
+  shiftLabel: string
+}
+
 export type OverviewResult = {
   cards: { label: string; value: number }[]
   modules: { name: string; created: number; pending: number; abnormal: number }[]

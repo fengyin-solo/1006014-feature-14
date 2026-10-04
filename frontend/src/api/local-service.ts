@@ -1,6 +1,7 @@
+import { runGpuAction } from '@/api/gpu-service'
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
-import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
+import type { ActionContext, ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
 const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚']
@@ -28,7 +29,25 @@ export function listEntries(key: string, filters: Record<string, string> = {}): 
   return { items: matched, total: matched.length, page: 1, size: matched.length }
 }
 
-export function runAction(key: string, id: number, action: string): ActionResult {
+// 没传身份时按只读处理：电源车的任何改动都必须能落到具体的当班值班员身上。
+const ANONYMOUS_CONTEXT: ActionContext = {
+  operator: '未登记人员',
+  role: '观察员',
+  team: '未分班',
+  shiftLabel: '',
+}
+
+export function runAction(
+  key: string,
+  id: number,
+  action: string,
+  payload: Record<string, string> = {},
+  context?: ActionContext,
+): ActionResult {
+  if (key === 'gpu') {
+    // 电源车的职责、归属、功率核对、状态链规则集中在 gpu-service 裁决。
+    return runGpuAction(id, action, payload, context ?? ANONYMOUS_CONTEXT)
+  }
   const meta = moduleMeta(key)
   const target = meta.actionTargets[action]
   if (!target) {

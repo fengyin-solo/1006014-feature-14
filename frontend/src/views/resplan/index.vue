@@ -18,6 +18,8 @@
       </article>
     </div>
 
+    <p class="source-note">电源车可调度台数与地面电源模块同源，每次供电发起、结束或转检修后自动重算资源缺口。</p>
+
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
@@ -79,19 +81,29 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import { gpuAvailability, syncGpuGapToResplan } from '@/api/gpu-service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('resplan')
 const columns = ["计划编号", "保障时段", "机位需求", "车辆需求", "人员需求", "资源缺口", "调度人员", "计划状态"]
 const actions = ["提交审核", "下发计划", "作废计划"]
 const statuses = ["待编制", "待审核", "已下发", "已作废"]
-const stats = [{"label": "待编制计划", "value": 0}, {"label": "已下发计划", "value": 0}, {"label": "存在缺口的计划", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const gpuAvailable = ref(0)
+const stats = computed(() => [
+  { label: '待编制计划', value: rows.value.filter((row) => String(row.status) === '待编制').length },
+  { label: '已下发计划', value: rows.value.filter((row) => String(row.status) === '已下发').length },
+  {
+    label: '存在缺口的计划',
+    value: rows.value.filter((row) => String(row['资源缺口'] ?? '').includes('缺口')).length,
+  },
+  { label: '电源车可调度台数', value: gpuAvailable.value },
+])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -125,6 +137,9 @@ function runAction(action: string, row: EntryRow) {
 function reload() {
   errorMessage.value = ''
   try {
+    // 先按电源车现状重算缺口，再读列表：两侧看到的可用台数与缺口始终同源。
+    syncGpuGapToResplan()
+    gpuAvailable.value = gpuAvailability().standby
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
